@@ -218,12 +218,13 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ═══════════════════════════════════════════════════════════════════════════════
-t1,t2,t3,t4,t5 = st.tabs([
+t1,t2,t3,t4,t5,t6 = st.tabs([
     "⬡  Process & Bottleneck",
     "⚙  Alternative Strategies",
     "📦  EOQ · UTC · LTC",
     "📊  Sensitivity & Simulation",
     "💰  Break-Even Analysis",
+    "◈  CPM Network",
 ])
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -483,8 +484,10 @@ Annual Production Loss from {downtime_pct}% downtime (without buffer)
 <br>
 Net Annual Benefit of Buffer = Loss Avoided − Holding Cost
                              = ${downtime_loss:,.0f} − ${hold_cost_yr:,.0f}
-                             = <b style="color:{'#22C55E' if net_benefit>0 else '#EF4444'}">${net_benefit:,.0f}</b>
+                             = <b>${net_benefit:,.0f}</b>
 </div>""", unsafe_allow_html=True)
+        benefit_color = "#22C55E" if net_benefit > 0 else "#EF4444"
+        st.markdown(f'<div class="result-box" style="color:{benefit_color}">Net Annual Benefit: <b>${net_benefit:,.0f}</b> {"✓ Positive — buffer is justified" if net_benefit > 0 else "✗ Negative — reduce buffer size"}</div>', unsafe_allow_html=True)
 
         # Buffer impact chart: throughput with/without buffer under downtime
         downtime_vals = np.linspace(0, 10, 50)
@@ -1011,13 +1014,14 @@ with t4:
         rho_sim = min(demand_sim / PC, 0.999)
         wq_sim  = (rho_sim / (PC - demand_sim)) * 60 if demand_sim < PC else 999
 
+        wq_display = f"{wq_sim:.1f}" if wq_sim < 900 else "∞"
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(f"""<div class="formula-box">
 TH = min(D, PC) = min({demand_sim}, {PC}) = <b>{th_sim:,} u/hr</b>
 U₁ = {demand_sim}/{PC} = <b>{u_sim:.1f}%</b>
 Unmet demand = max({demand_sim}−{PC}, 0) = <b>{unmet} u/hr</b>
-Wq = {wq_sim:.1f if wq_sim < 900 else '∞'} min
+Wq = {wq_display} min
 </div>""", unsafe_allow_html=True)
 
             if demand_sim > PC:
@@ -1264,6 +1268,333 @@ First-Year ROI   = (Annual Profit − Investment) / Investment
     }
     comp_df = pd.DataFrame(comp_data)
     st.dataframe(comp_df, hide_index=True, use_container_width=True)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TAB 6 — CPM NETWORK ANALYSIS
+# ════════════════════════════════════════════════════════════════════════════════
+with t6:
+    st.markdown('<div class="sec-head">CPM — CRITICAL PATH METHOD NETWORK ANALYSIS</div>', unsafe_allow_html=True)
+    st.markdown("""<div class="banner-amb">
+    CPM maps the 4-stage DRAM process as a network of activities with Early Start (ES), Early Finish (EF),
+    Late Start (LS), Late Finish (LF), and Slack. Because all 4 stages are <b>sequential</b>, every stage
+    is on the Critical Path (Slack = 0) and the project duration equals the total Flow Time = <b>125.8 min</b>.
+    The extended 7-stage parallel view beneath shows how parallel supply-side inputs create schedule float.
+    </div>""", unsafe_allow_html=True)
+
+    # ── 4-STAGE LINEAR CPM ────────────────────────────────────────────────────
+    st.markdown('<div class="sec-head">4-STAGE LINEAR CPM — CONSISTENT WITH BASE FRAMEWORK (FT = 125.8 min)</div>',
+                unsafe_allow_html=True)
+
+    # CPM data for 4-stage model
+    cpm4 = [
+        {"id":"S1","name":"Wafer\nFabrication","at":60.0, "es":0,   "ef":60.0, "ls":0,   "lf":60.0, "slack":0,"color":"#EF4444","x":130,"y":200},
+        {"id":"S2","name":"Wafer\nDicing",     "at":21.4,"es":60.0,"ef":81.4,"ls":60.0,"lf":81.4,"slack":0,"color":"#3B82F6","x":320,"y":200},
+        {"id":"S3","name":"Testing\n& Burn-in","at":27.3,"es":81.4,"ef":108.7,"ls":81.4,"lf":108.7,"slack":0,"color":"#8B5CF6","x":510,"y":200},
+        {"id":"S4","name":"Packaging\n& Assy.","at":17.1,"es":108.7,"ef":125.8,"ls":108.7,"lf":125.8,"slack":0,"color":"#10B981","x":700,"y":200},
+    ]
+
+    fig_cpm4 = go.Figure()
+
+    # Grid
+    for xv in range(0,870,60): fig_cpm4.add_shape(type="line",x0=xv,x1=xv,y0=0,y1=380,line=dict(color="rgba(30,64,175,0.06)",width=1),xref="x",yref="y")
+    for yv in range(0,380,60): fig_cpm4.add_shape(type="line",x0=0,x1=870,y0=yv,y1=yv,line=dict(color="rgba(30,64,175,0.06)",width=1),xref="x",yref="y")
+
+    # Edges (arrows between nodes)
+    edges4 = [("START",70,200,"S1",90,200),("S1",170,200,"S2",270,200),
+               ("S2",370,200,"S3",460,200),("S3",560,200,"S4",650,200),("S4",750,200,"END",790,200)]
+    for _,x0,y0,_2,x1,y1 in edges4:
+        fig_cpm4.add_annotation(ax=x0,ay=y0,x=x1,y=y1,xref="x",yref="y",axref="x",ayref="y",
+            showarrow=True,arrowhead=2,arrowsize=1.2,arrowwidth=2.5,arrowcolor="#EF4444")
+
+    # START / END nodes
+    for nx,ny,nlabel in [(55,200,"START"),(810,200,"END\n125.8")]:
+        fig_cpm4.add_shape(type="circle",x0=nx-28,y0=ny-28,x1=nx+28,y1=ny+28,
+            fillcolor="rgba(56,189,248,0.12)",line=dict(color="#38BDF8",width=2),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx,y=ny,text=nlabel.replace("\n","<br>"),showarrow=False,
+            font=dict(color="#38BDF8",size=9,family="JetBrains Mono"),xref="x",yref="y",align="center")
+
+    # Stage nodes
+    for n in cpm4:
+        c = n["color"]
+        nx,ny = n["x"],n["y"]
+        # Outer glow
+        fig_cpm4.add_shape(type="circle",x0=nx-48,y0=ny-48,x1=nx+48,y1=ny+48,
+            fillcolor="rgba(0,0,0,0)",line=dict(color=c,width=0.8),opacity=0.3,xref="x",yref="y")
+        # Main circle
+        fig_cpm4.add_shape(type="circle",x0=nx-40,y0=ny-40,x1=nx+40,y1=ny+40,
+            fillcolor=hex_rgba(c,0.12),line=dict(color=c,width=2.5),xref="x",yref="y")
+        # ES box (top-left above node)
+        fig_cpm4.add_shape(type="rect",x0=nx-40,y0=ny+42,x1=nx-2,y1=ny+60,
+            fillcolor=hex_rgba(c,0.25),line=dict(color=c,width=0.8),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx-21,y=ny+51,text=str(n["es"]),showarrow=False,
+            font=dict(color=c,size=9,family="JetBrains Mono"),xref="x",yref="y")
+        # EF box (top-right above node)
+        fig_cpm4.add_shape(type="rect",x0=nx+2,y0=ny+42,x1=nx+40,y1=ny+60,
+            fillcolor=hex_rgba(c,0.25),line=dict(color=c,width=0.8),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx+21,y=ny+51,text=str(n["ef"]),showarrow=False,
+            font=dict(color=c,size=9,family="JetBrains Mono"),xref="x",yref="y")
+        # LS box (bottom-left below node)
+        fig_cpm4.add_shape(type="rect",x0=nx-40,y0=ny-60,x1=nx-2,y1=ny-42,
+            fillcolor="rgba(255,255,255,0.04)",line=dict(color="rgba(148,163,184,0.3)",width=0.8),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx-21,y=ny-51,text=str(n["ls"]),showarrow=False,
+            font=dict(color="rgba(148,163,184,0.6)",size=9,family="JetBrains Mono"),xref="x",yref="y")
+        # LF box (bottom-right below node)
+        fig_cpm4.add_shape(type="rect",x0=nx+2,y0=ny-60,x1=nx+40,y1=ny-42,
+            fillcolor="rgba(255,255,255,0.04)",line=dict(color="rgba(148,163,184,0.3)",width=0.8),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx+21,y=ny-51,text=str(n["lf"]),showarrow=False,
+            font=dict(color="rgba(148,163,184,0.6)",size=9,family="JetBrains Mono"),xref="x",yref="y")
+        # S=0 badge
+        fig_cpm4.add_shape(type="rect",x0=nx+38,y0=ny-8,x1=nx+62,y1=ny+8,
+            fillcolor="#EF4444",line=dict(color="#EF4444",width=0),xref="x",yref="y")
+        fig_cpm4.add_annotation(x=nx+50,y=ny,text="S=0",showarrow=False,
+            font=dict(color="white",size=8,family="JetBrains Mono"),xref="x",yref="y")
+        # Node label + duration
+        label = n["name"].replace("\n","<br>")
+        fig_cpm4.add_annotation(x=nx,y=ny+8,text=f"<b>{n['id']}</b><br>{label}",showarrow=False,
+            font=dict(color=c,size=8,family="JetBrains Mono"),xref="x",yref="y",align="center")
+        fig_cpm4.add_annotation(x=nx,y=ny-18,text=f"<b>{n['at']}</b>",showarrow=False,
+            font=dict(color="white",size=11,family="JetBrains Mono"),xref="x",yref="y")
+
+    # Legend annotations
+    fig_cpm4.add_annotation(x=40,y=340,text="<b>ES  EF</b> ← above node<br><span style='color:#94A3B8'>LS  LF</span> ← below node<br><b style='color:#EF4444'>S=0</b> = All Critical",
+        showarrow=False,font=dict(color="#C8D6E5",size=9,family="JetBrains Mono"),
+        bgcolor="rgba(10,14,26,0.85)",bordercolor="rgba(56,189,248,0.25)",borderwidth=1,borderpad=6,
+        xref="x",yref="y",align="left")
+    fig_cpm4.add_annotation(x=600,y=340,
+        text="<b style='color:#EF4444'>CRITICAL PATH: S1→S2→S3→S4</b><br>Duration = 60.0+21.4+27.3+17.1 = <b>125.8 min</b><br>All stages sequential → Slack = 0 everywhere",
+        showarrow=False,font=dict(color="#C8D6E5",size=10,family="JetBrains Mono"),
+        bgcolor="rgba(239,68,68,0.08)",bordercolor="#EF4444",borderwidth=1,borderpad=8,
+        xref="x",yref="y",align="left")
+
+    fig_cpm4.update_layout(
+        paper_bgcolor="#0A0E1A",plot_bgcolor="#0D1525",
+        xaxis=dict(range=[0,870],showgrid=False,showticklabels=False,zeroline=False),
+        yaxis=dict(range=[80,400],showgrid=False,showticklabels=False,zeroline=False),
+        height=380,margin=dict(l=10,r=10,t=10,b=10),showlegend=False,
+    )
+    st.plotly_chart(fig_cpm4, use_container_width=True)
+
+    # ── Slack Table ────────────────────────────────────────────────────────────
+    cpm_left, cpm_right = st.columns(2)
+    with cpm_left:
+        st.markdown('<div class="sec-head">SLACK CALCULATION TABLE  |  Slack = LS − ES</div>', unsafe_allow_html=True)
+        slack_data = []
+        for n in cpm4:
+            slack_data.append({
+                "Stage": n["id"],
+                "Activity Time (min)": n["at"],
+                "ES": n["es"], "EF": n["ef"],
+                "LS": n["ls"], "LF": n["lf"],
+                "LS − ES": n["ls"] - n["es"],
+                "Slack": n["slack"],
+                "On Critical Path": "✓ YES",
+            })
+        st.dataframe(pd.DataFrame(slack_data), hide_index=True, use_container_width=True)
+
+        st.markdown("""<div class="formula-box">
+CPM Formula:
+Forward Pass:  EF = ES + AT
+               ES(next) = EF(prev)
+Backward Pass: LS = LF − AT
+               LF(prev) = LS(next)
+Slack = LS − ES = LF − EF
+Critical Path = all stages with Slack = 0
+Project Duration = max(EF) = 125.8 min
+</div>""", unsafe_allow_html=True)
+
+    with cpm_right:
+        st.markdown('<div class="sec-head">PATH DURATION — ALL STAGES CRITICAL</div>', unsafe_allow_html=True)
+        fig_bar = go.Figure()
+        colors4 = [s["color"] for s in cpm4]
+        cumulative = 0
+        for i, n in enumerate(cpm4):
+            fig_bar.add_trace(go.Bar(
+                name=n["id"], x=[n["at"]], y=[f"{n['id']}: {n['name'].replace(chr(10),' ')}"],
+                orientation="h", base=cumulative,
+                marker=dict(color=hex_rgba(n["color"],0.75),line=dict(color=n["color"],width=2)),
+                text=f"{n['at']} min", textposition="inside",
+                textfont=dict(color="white",size=10,family="JetBrains Mono"),
+                showlegend=False,
+            ))
+            cumulative += n["at"]
+        fig_bar.add_vline(x=125.8,line_dash="dot",line_color="#EF4444",line_width=2,
+                          annotation_text="FT=125.8",annotation_font_color="#EF4444")
+        fig_bar.update_layout(
+            paper_bgcolor="#0A0E1A",plot_bgcolor="#0D1525",
+            xaxis=dict(title=dict(text="Cumulative Time (min)",font=dict(color="#94A3B8")),
+                       tickfont=dict(family="JetBrains Mono",size=10),**GRID),
+            yaxis=dict(tickfont=dict(size=10),**GRID),
+            height=220,margin=dict(l=10,r=10,t=10,b=10),barmode="stack",
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.markdown("""<div class="banner-red">
+        <b>Key Inference:</b> Because the process is entirely sequential, every minute added to
+        any stage directly extends the project duration. Wafer Fab (60 min) dominates — it is both
+        the bottleneck (highest utilization) AND contributes 47.7% of total flow time.
+        </div>""", unsafe_allow_html=True)
+
+    # ── Interactive CPM What-If ─────────────────────────────────────────────
+    st.markdown('<div class="sec-head">INTERACTIVE CPM — WHAT-IF ANALYSIS (DRAG SLIDERS)</div>',
+                unsafe_allow_html=True)
+    st.markdown("<span style='font-size:11px;color:rgba(148,163,184,0.6);font-family:Inter'>Adjust activity times to see how the Critical Path and project duration change.</span>",
+                unsafe_allow_html=True)
+
+    ia1, ia2, ia3, ia4 = st.columns(4)
+    with ia1: at1_cpm = st.slider("S1 Wafer Fab AT (min)", 20, 90, 60, key="cpm_at1")
+    with ia2: at2_cpm = st.slider("S2 Dicing AT (min)",    10, 40, 21, key="cpm_at2")
+    with ia3: at3_cpm = st.slider("S3 Testing AT (min)",   10, 50, 27, key="cpm_at3")
+    with ia4: at4_cpm = st.slider("S4 Packaging AT (min)", 5,  35, 17, key="cpm_at4")
+
+    ats = [at1_cpm, at2_cpm, at3_cpm, at4_cpm]
+    ft_new = sum(ats)
+    ac_new = [(60/a)*1000 for a in ats]
+    pc_new = min(ac_new)
+    bn_new = ac_new.index(pc_new) + 1
+
+    # Recompute CPM
+    es_v, ef_v, ls_v, lf_v = [0], [ats[0]], [], []
+    for i in range(1, 4):
+        es_v.append(ef_v[-1]); ef_v.append(es_v[-1]+ats[i])
+    lf_last = ef_v[-1]
+    lf_v = [None]*4; ls_v = [None]*4
+    lf_v[3] = lf_last; ls_v[3] = lf_v[3] - ats[3]
+    for i in range(2,-1,-1):
+        lf_v[i] = ls_v[i+1]; ls_v[i] = lf_v[i] - ats[i]
+    slacks = [ls_v[i]-es_v[i] for i in range(4)]
+
+    st.markdown(f"""<div class="formula-box">
+Custom AT₁={at1_cpm}  AT₂={at2_cpm}  AT₃={at3_cpm}  AT₄={at4_cpm}  →  Flow Time = <b>{ft_new:.0f} min</b>
+<br>
+ES: {es_v[0]}→{es_v[1]}→{es_v[2]}→{es_v[3]}    EF: {ef_v[0]}→{ef_v[1]}→{ef_v[2]}→{ef_v[3]}
+LS: {ls_v[0]:.0f}→{ls_v[1]:.0f}→{ls_v[2]:.0f}→{ls_v[3]:.0f}    LF: {lf_v[0]:.0f}→{lf_v[1]:.0f}→{lf_v[2]:.0f}→{lf_v[3]:.0f}
+Slacks: {slacks[0]:.0f} / {slacks[1]:.0f} / {slacks[2]:.0f} / {slacks[3]:.0f}   (All zero = all critical)
+<br>
+New Process Capacity PC = {pc_new:,.0f} u/hr  →  Bottleneck = Stage {bn_new}
+vs Baseline PC = 1,000 u/hr  →  Change = {pc_new-1000:+,.0f} u/hr
+</div>""", unsafe_allow_html=True)
+
+    wa, wb, wc, wd = st.columns(4)
+    stage_names_short = ["S1 Wafer Fab","S2 Dicing","S3 Testing","S4 Packaging"]
+    for col, i, sname in zip([wa,wb,wc,wd], range(4), stage_names_short):
+        col.markdown(kpi(sname, f"AC={ac_new[i]:,.0f}","#EF4444" if i==ac_new.index(min(ac_new)) else "#38BDF8",
+                         f"AT={ats[i]}min Slack={slacks[i]:.0f}"), unsafe_allow_html=True)
+
+    # ── Extended 7-Stage Parallel CPM ─────────────────────────────────────────
+    with st.expander("◈  Extended View — 7-Stage Parallel CPM (Supply-Chain Analysis Layer)", expanded=False):
+        st.markdown("""<div class="banner-amb">
+        This extended view augments the base 4-stage model with supply-side parallel inputs
+        (PCB Substrate, Controller IC, SPD Chips) that feed into Module Assembly.
+        It is supplementary analysis — the base formulas (PC, TH, U) remain unchanged.
+        </div>""", unsafe_allow_html=True)
+
+        cpm7_nodes = [
+            {"id":"START","label":"START",        "dur":0,   "es":0,    "ef":0,    "ls":0,    "lf":0,    "slack":0,   "crit":True, "x":55, "y":230,"color":"#38BDF8"},
+            {"id":"S1",   "label":"S1\nWafer Fab","dur":60.0,"es":0,    "ef":60.0, "ls":0,    "lf":60.0, "slack":0,   "crit":True, "x":195,"y":230,"color":"#EF4444"},
+            {"id":"S2",   "label":"S2\nDRAM Test","dur":44.1,"es":60.0, "ef":104.1,"ls":60.0, "lf":104.1,"slack":0,   "crit":True, "x":365,"y":230,"color":"#F97316"},
+            {"id":"S3",   "label":"S3\nPCB Sub.", "dur":51.7,"es":0,    "ef":51.7, "ls":52.4, "lf":104.1,"slack":52.4,"crit":False,"x":195,"y":90, "color":"#F59E0B"},
+            {"id":"S4",   "label":"S4\nCtrl IC",  "dur":48.6,"es":0,    "ef":48.6, "ls":55.5, "lf":104.1,"slack":55.5,"crit":False,"x":195,"y":160,"color":"#EAB308"},
+            {"id":"S6",   "label":"S6\nSPD Chip", "dur":39.5,"es":0,    "ef":39.5, "ls":64.6, "lf":104.1,"slack":64.6,"crit":False,"x":195,"y":305,"color":"#3B82F6"},
+            {"id":"S5",   "label":"S5\nMod.Asm.", "dur":36.5,"es":104.1,"ef":140.6,"ls":104.1,"lf":140.6,"slack":0,   "crit":True, "x":530,"y":230,"color":"#22C55E"},
+            {"id":"S7",   "label":"S7\nLogistics","dur":24.3,"es":140.6,"ef":164.9,"ls":140.6,"lf":164.9,"slack":0,   "crit":True, "x":700,"y":230,"color":"#8B5CF6"},
+            {"id":"END",  "label":"END\n164.9",   "dur":0,   "es":164.9,"ef":164.9,"ls":164.9,"lf":164.9,"slack":0,   "crit":True, "x":840,"y":230,"color":"#38BDF8"},
+        ]
+        node_map7 = {n["id"]: n for n in cpm7_nodes}
+
+        cpm7_edges = [
+            ("START","S1",True),("START","S3",False),("START","S4",False),("START","S6",False),
+            ("S1","S2",True),("S2","S5",True),("S3","S5",False),("S4","S5",False),
+            ("S6","S5",False),("S5","S7",True),("S7","END",True),
+        ]
+
+        fig7 = go.Figure()
+        for xv in range(0,920,50): fig7.add_shape(type="line",x0=xv,x1=xv,y0=0,y1=400,line=dict(color="rgba(30,64,175,0.05)",width=1),xref="x",yref="y")
+        for yv in range(0,400,50): fig7.add_shape(type="line",x0=0,x1=920,y0=yv,y1=yv,line=dict(color="rgba(30,64,175,0.05)",width=1),xref="x",yref="y")
+
+        for frm,to,crit in cpm7_edges:
+            fn=node_map7[frm]; tn=node_map7[to]
+            x0,y0=fn["x"],fn["y"]; x1,y1=tn["x"],tn["y"]
+            dx,dy=x1-x0,y1-y0; dist=math.sqrt(dx**2+dy**2)
+            if dist==0: continue
+            r=34
+            sx0=x0+(dx/dist)*r; sy0=y0+(dy/dist)*r
+            sx1=x1-(dx/dist)*r; sy1=y1-(dy/dist)*r
+            fig7.add_annotation(ax=sx0,ay=sy0,x=sx1,y=sy1,xref="x",yref="y",axref="x",ayref="y",
+                showarrow=True,arrowhead=2,arrowsize=1.1,
+                arrowwidth=2.5 if crit else 1.5,
+                arrowcolor="#EF4444" if crit else "rgba(148,163,184,0.35)")
+
+        for n in cpm7_nodes:
+            c=n["color"]; nx,ny=n["x"],n["y"]
+            is_end = n["id"] in ("START","END")
+            r = 26 if is_end else 34
+            fig7.add_shape(type="circle",x0=nx-r,y0=ny-r,x1=nx+r,y1=ny+r,
+                fillcolor=hex_rgba(c,0.12),line=dict(color=c,width=2.5 if n["crit"] else 1.5),xref="x",yref="y")
+            if not is_end:
+                for bx,bval,side,is_top in [(nx-r,n["es"],"L",True),(nx+2,n["ef"],"R",True),
+                                             (nx-r,n["ls"],"L",False),(nx+2,n["lf"],"R",False)]:
+                    bcol = c if is_top else "rgba(148,163,184,0.5)"
+                    bfill = hex_rgba(c,0.2) if is_top else "rgba(255,255,255,0.03)"
+                    yo = ny+r+2 if is_top else ny-r-18
+                    fig7.add_shape(type="rect",x0=bx,y0=yo,x1=bx+r-2,y1=yo+16,
+                        fillcolor=bfill,line=dict(color=bcol,width=0.6),xref="x",yref="y")
+                    fig7.add_annotation(x=bx+(r-2)/2,y=yo+8,text=str(bval),showarrow=False,
+                        font=dict(color=bcol,size=8,family="JetBrains Mono"),xref="x",yref="y")
+                sbadge_c = "#EF4444" if n["slack"]==0 else "#F59E0B"
+                sbadge_t = "S=0" if n["slack"]==0 else f"+{n['slack']}"
+                fig7.add_shape(type="rect",x0=nx+r,y0=ny-7,x1=nx+r+30,y1=ny+7,
+                    fillcolor=sbadge_c,line=dict(color=sbadge_c,width=0),xref="x",yref="y")
+                fig7.add_annotation(x=nx+r+15,y=ny,text=sbadge_t,showarrow=False,
+                    font=dict(color="white" if n["slack"]==0 else "black",size=8,family="JetBrains Mono"),xref="x",yref="y")
+            label = n["label"].replace("\n","<br>")
+            fig7.add_annotation(x=nx,y=ny+(0 if is_end else 8),text=f"<b>{label}</b>",showarrow=False,
+                font=dict(color=c,size=8,family="JetBrains Mono"),xref="x",yref="y",align="center")
+            if not is_end and n["dur"]>0:
+                fig7.add_annotation(x=nx,y=ny-18,text=f"<b>{n['dur']}</b>",showarrow=False,
+                    font=dict(color="white",size=10,family="JetBrains Mono"),xref="x",yref="y")
+
+        fig7.add_annotation(x=770,y=370,
+            text="<b style='color:#EF4444'>CRITICAL PATH: S1→S2→S5→S7 = 164.9 min</b>",
+            showarrow=False,font=dict(color="#E2E8F0",size=10,family="JetBrains Mono"),
+            bgcolor="rgba(239,68,68,0.1)",bordercolor="#EF4444",borderwidth=1,borderpad=6,
+            xref="x",yref="y")
+
+        fig7.update_layout(
+            paper_bgcolor="#0A0E1A",plot_bgcolor="#0D1525",
+            xaxis=dict(range=[0,920],showgrid=False,showticklabels=False,zeroline=False),
+            yaxis=dict(range=[30,410],showgrid=False,showticklabels=False,zeroline=False),
+            height=420,margin=dict(l=10,r=10,t=10,b=10),showlegend=False,
+        )
+        st.plotly_chart(fig7, use_container_width=True)
+
+        # 7-stage path comparison
+        paths7 = [
+            ("S1→S2→S5→S7 (Critical Path)", 60.0+44.1+36.5+24.3, 0,    "#EF4444"),
+            ("S3 (PCB)→S5→S7",              51.7+36.5+24.3,       52.4, "#F59E0B"),
+            ("S4 (Ctrl IC)→S5→S7",          48.6+36.5+24.3,       55.5, "#EAB308"),
+            ("S6 (SPD)→S5→S7",              39.5+36.5+24.3,       64.6, "#3B82F6"),
+        ]
+        fig_p7 = go.Figure()
+        for pname,pdur,pslack,pc7 in paths7:
+            fig_p7.add_trace(go.Bar(y=[pname],x=[pdur],orientation="h",
+                marker=dict(color=hex_rgba(pc7,0.75),line=dict(color=pc7,width=1.5)),
+                text=f"{pdur:.1f} min  |  Slack: {pslack} min",textposition="inside",
+                textfont=dict(color="white",size=10,family="JetBrains Mono"),showlegend=False))
+        fig_p7.add_vline(x=164.9,line_dash="dot",line_color="#EF4444",line_width=2,
+                         annotation_text="CP=164.9",annotation_font_color="#EF4444")
+        fig_p7.update_layout(
+            paper_bgcolor="#0A0E1A",plot_bgcolor="#0D1525",
+            xaxis=dict(range=[0,185],tickfont=dict(family="JetBrains Mono",size=9),**GRID),
+            yaxis=dict(tickfont=dict(size=9),**GRID),
+            height=200,margin=dict(l=10,r=10,t=10,b=10),
+        )
+        st.plotly_chart(fig_p7, use_container_width=True)
+
+        slack_rows7 = [{"Stage":n["id"],"Duration (min)":n["dur"],"ES":n["es"],"EF":n["ef"],
+                         "LS":n["ls"],"LF":n["lf"],"Slack":n["slack"],
+                         "Critical": "✓ YES" if n["crit"] else "✗ No"}
+                        for n in cpm7_nodes if n["id"] not in ("START","END")]
+        st.dataframe(pd.DataFrame(slack_rows7), hide_index=True, use_container_width=True)
 
 # ─── FOOTER ──────────────────────────────────────────────────────────────────
 st.markdown("""
