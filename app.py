@@ -767,7 +767,7 @@ New U₁  = {DEMAND}/{amhs_boost:.0f} = <b>{new_u_par:.1f}%</b>
         fig_par.update_yaxes(title_text="Capacity (u/hr)",   secondary_y=False,
                              **ax(tickfont=dict(family="JetBrains Mono",size=10)))
         fig_par.update_yaxes(title_text="Utilization (%)",    secondary_y=True,
-                             range=[0,110], gridcolor="transparent",
+                             range=[0,110], gridcolor="rgba(0,0,0,0)",
                              tickfont=dict(family="JetBrains Mono",size=10))
         st.plotly_chart(fig_par, use_container_width=True)
 
@@ -1058,7 +1058,7 @@ Wq = {wq_display} min
                 xaxis=ax(title=dict(text="Demand (u/hr)"), tickfont=dict(family="JetBrains Mono",size=9)),
                 yaxis=ax(title=dict(text="TH (u/hr)"), tickfont=dict(family="JetBrains Mono",size=9)),
                 yaxis2=dict(title=dict(text="Utilization (%)"), overlaying="y", side="right",
-                            range=[0,120], gridcolor="transparent",
+                            range=[0,120], gridcolor="rgba(0,0,0,0)",
                             tickfont=dict(family="JetBrains Mono",size=9)),
                 legend=dict(bgcolor="rgba(0,0,0,0)"), height=300,
             )
